@@ -1,264 +1,316 @@
-// Volledige aangepaste code met ArrayList in plaats van List
-
+//javaFX lib voor de UI
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
-
+// lib voor connectie en overige dingen
 import java.io.*;
 import java.net.Socket;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-
+import java.util.stream.Collectors;
+// application is een class van javaFX die je extend zodat je methoden kan gebruken van javaFX
+// zoals launch, start en andree
 public class ChatClientFX extends Application {
 
     private PrintWriter output;
     private TextArea chatArea;
     private TextField inputField;
-    private String serverAddress = ""; // Server address
-    private Gebruiker gebruiker; // De huidige gebruiker
-    private Team team; // Het team van de gebruiker
-    private Label chatInfoLabel; // Label om huidige chat-informatie weer te geven
+    private final String serverAddress = "localhost";
+    private Gebruiker gebruiker;
+    private Team team;
+    private Label chatInfo;
     private static final int PORT = 12345;
-    private Stage primaryStage; // Hoofdvenster
+    private Stage scherm;
     private Bericht actiefBericht;
-
-    // Statische lijsten met teams en onderwerpen
+    private Chat chat;
+    private VBox root;
+    // lijst met alle teams
     private static final ArrayList<Team> teams = new ArrayList<>();
-    private static final ArrayList<String> onderwerpen = new ArrayList<>();
 
     static {
-        Team development = new Team(1, "Development");
-        development.voegOnderwerpToe("Bug Fixing");
-        development.voegOnderwerpToe("Project Planning");
-        development.voegOnderwerpToe("Daily Scrum");
-
-        Team marketing = new Team(2, "Marketing");
-        marketing.voegOnderwerpToe("Ad Campaign");
-        marketing.voegOnderwerpToe("Daily Scrum");
-
-        Team design = new Team(3, "Design");
-        design.voegOnderwerpToe("UX Research");
-        design.voegOnderwerpToe("Mockup Design");
-
+        Team algemeen = new Team("Algemeen", "De chat voor algemeen gesprek.");
+        Team marketing = new Team("Marketing", "De chat voor het marketing van de applicatie.");
+        Team design = new Team("Design", "De chat voor het design van de applicatie.");
+        Team development = new Team("Development", "De chat voor de ontwikkeling van de applicatie.");
+        teams.add(algemeen);
         teams.add(development);
         teams.add(marketing);
         teams.add(design);
     }
 
-    @Override
+
     public void start(Stage stage) {
-        this.primaryStage = stage;
-
-        if (serverAddress.isEmpty() || gebruiker == null) {
-            setupInitialInfo();
-        }
-
+        this.scherm = stage;
         setupChat();
     }
 
-    private void setupInitialInfo() {
-        serverAddress = promptServerAddress();
+    private void setupChat() {
         String gebruikersnaam = promptGebruikersnaam();
         gebruiker = new Gebruiker(1, gebruikersnaam, "");
-    }
-
-    private void setupChat() {
-        team = promptSelectTeam();
-        String chatOnderwerp = promptSelectOnderwerp();
-
-        Chat chat = new Chat(1, chatOnderwerp);
+        // Begin met het instellen van het eerste team
+        team = teams.get(0);
         team.setChat(chat);
         gebruiker.setTeam(team);
+        connectToServer();
+        // setOnMouseEntered is de kleur die het vakje is als je je muis er over heen houdt.
+        // exited doet het terug naar wat het hoort te zijn.
+        // listen luister naar de gebruiker voor een actie zoals een click
 
+        // tekstvak voor de chat
         chatArea = new TextArea();
         chatArea.setEditable(false);
         chatArea.setWrapText(true);
         VBox.setVgrow(chatArea, Priority.ALWAYS);
         chatArea.setStyle("-fx-background-color: #ffffff; -fx-border-color: #cccccc; -fx-font-size: 14px;");
-
+        // Maakt het invoerveld voor een bericht
         inputField = new TextField();
-        inputField.setPromptText("Typ je bericht hier...");
+        inputField.setPromptText("Type je bericht hier...");
         HBox.setHgrow(inputField, Priority.ALWAYS);
         inputField.setStyle("-fx-background-color: #f7f7f7; -fx-border-color: #cccccc; -fx-font-size: 14px;");
-
-        Button sendButton = new Button("Verstuur");
-        sendButton.setPrefWidth(100);
-        sendButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold;");
-        sendButton.setOnMouseEntered(e -> sendButton.setStyle("-fx-background-color: #0056b3; -fx-text-fill: white; -fx-font-weight: bold;"));
-        sendButton.setOnMouseExited(e -> sendButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold;"));
-
-        Button backButton = new Button("Terug");
-        backButton.setPrefWidth(100);
-        backButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white; -fx-font-weight: bold;");
-        backButton.setOnMouseEntered(e -> backButton.setStyle("-fx-background-color: #565e64; -fx-text-fill: white; -fx-font-weight: bold;"));
-        backButton.setOnMouseExited(e -> backButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white; -fx-font-weight: bold;"));
-        backButton.setOnAction(e -> returnToTeamSelection());
-
-        Button koppelenButton = new Button("Koppel");
-        koppelenButton.setPrefWidth(120);
-        koppelenButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold;");
-        koppelenButton.setOnMouseEntered(e -> koppelenButton.setStyle("-fx-background-color: #218838; -fx-text-fill: white; -fx-font-weight: bold;"));
-        koppelenButton.setOnMouseExited(e -> koppelenButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold;"));
-        koppelenButton.setOnAction(e -> koppelBericht());
-
-        chatInfoLabel = new Label("Team: " + team.getNaam() + " | Onderwerp: " + chat.getOnderwerp());
-        chatInfoLabel.setStyle("-fx-background-color: #e9ecef; -fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 10px;");
-        VBox.setMargin(chatInfoLabel, new Insets(10, 0, 10, 0));
-
-        HBox inputBox = new HBox(10, inputField, sendButton, koppelenButton, backButton);
+        //knop om een nieuw team aan te maken
+        Button maakNieuwTeam = new Button("Maak nieuw team");
+        maakNieuwTeam.setPrefWidth(150);
+        maakNieuwTeam.setStyle("-fx-background-color: #ffc107; -fx-text-fill: black; -fx-font-weight: bold;");
+        maakNieuwTeam.setOnMouseEntered(click -> maakNieuwTeam.setStyle("-fx-background-color: #e0a800; -fx-text-fill: black; -fx-font-weight: bold;"));
+        maakNieuwTeam.setOnMouseExited(click -> maakNieuwTeam.setStyle("-fx-background-color: #ffc107; -fx-text-fill: black; -fx-font-weight: bold;"));
+        maakNieuwTeam.setOnAction(click -> NieuwteamBericht());
+        // Maak een knop om het bericht te sturen
+        Button verstuurKnop = new Button("Verstuur");
+        verstuurKnop.setPrefWidth(100);
+        verstuurKnop.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold;");
+        verstuurKnop.setOnMouseEntered(click -> verstuurKnop.setStyle("-fx-background-color: #0056b3; -fx-text-fill: white; -fx-font-weight: bold;"));
+        verstuurKnop.setOnMouseExited(click -> verstuurKnop.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold;"));
+        // Maak een knop om berichten te koppelen
+        Button kopelKnop = new Button("Koppel");
+        kopelKnop.setPrefWidth(120);
+        kopelKnop.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold;");
+        kopelKnop.setOnMouseEntered(click -> kopelKnop.setStyle("-fx-background-color: #218838; -fx-text-fill: white; -fx-font-weight: bold;"));
+        kopelKnop.setOnMouseExited(click -> kopelKnop.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold;"));
+        kopelKnop.setOnAction(click -> koppelBericht());
+        //  chatinformatie van je team
+        chatInfo = new Label("Team: " + team.getNaam() + " (" + team.getOnderwerp() + ")");
+        chatInfo.setStyle("-fx-background-color: #e9ecef; -fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 10px;");
+        VBox.setMargin(chatInfo, new Insets(10, 0, 10, 0));
+        //ComboBox(box met meerde opties) voor het wisselen van team
+        ComboBox<String> teamComboBox = new ComboBox<>();
+        teamComboBox.getItems().addAll(
+                teams.stream().map(Team::getNaam).toList());
+        teamComboBox.setValue(team.getNaam());
+        teamComboBox.setStyle("-fx-font-size: 14px;");
+        teamComboBox.setOnAction(click -> {
+            String selectedTeam = teamComboBox.getValue();
+            team = teams.stream().filter(t -> t.getNaam().equals(selectedTeam)).findFirst().orElse(teams.get(0));
+            updateChatvoorTeam();
+        });
+        // Voeg de ComboBox toe aan de bovenkant van de layout (dashboard)
+        HBox dashboard = new HBox(10, new Label("Selecteer team:"), teamComboBox);
+        dashboard.setPadding(new Insets(10));
+        dashboard.setStyle("-fx-background-color: transparent; -fx-border-radius: 15px; -fx-border-color: #007bff; -fx-border-width: 2px;");
+        Label label = (Label) dashboard.getChildren().get(0); // Haal de label op uit de HBox
+        label.setStyle("-fx-font-size: 20px;");
+        // layout chat
+        HBox inputBox = new HBox(10, inputField, verstuurKnop, kopelKnop, maakNieuwTeam);
         inputBox.setPadding(new Insets(10));
         inputBox.setStyle("-fx-background-color: #f8f9fa;");
-
-        VBox root = new VBox(10, chatInfoLabel, chatArea, inputBox);
+        root = new VBox(10, dashboard, chatInfo, chatArea, inputBox, maakNieuwTeam);
         root.setPadding(new Insets(10));
         root.setStyle("-fx-background-color: #d3d3d3;");
-
-        root.prefWidthProperty().bind(primaryStage.widthProperty());
-        root.prefHeightProperty().bind(primaryStage.heightProperty());
-
-        sendButton.setOnAction(e -> sendMessage());
+        root.prefWidthProperty().bind(scherm.widthProperty());
+        root.prefHeightProperty().bind(scherm.heightProperty());
+        verstuurKnop.setOnAction(e -> sendMessage());
         inputField.setOnAction(e -> sendMessage());
-
         Scene scene = new Scene(root, 800, 600);
-        primaryStage.setTitle("Chat Team: " + team.getNaam() + " - Onderwerp: " + chat.getOnderwerp());
-        primaryStage.setScene(scene);
-        primaryStage.show();
+        scherm.setTitle("Chat Team: " + team.getNaam());
+        scherm.setScene(scene);
+        scherm.show();
+    }
 
+    // Methode om de chat bij te werken omdat je switched van team
+    private void updateChatvoorTeam() {
+        chatInfo.setText("Team: " + team.getNaam() + " (" + team.getOnderwerp() + ")");
+        // Leegt de chat omdat je in een nieuwe team gaat
+        chatArea.clear();
+        // verbinf opniew met server omdat we nu in een ander team gaan
         connectToServer();
     }
 
     private void koppelBericht() {
+        // leest het bericht in die in het type hier veld staat
         String message = inputField.getText().trim();
-        if (message.isEmpty()) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Leeg bericht");
-            alert.setHeaderText(null);
-            alert.setContentText("Voer eerst een bericht in voordat je iets koppelt.");
-            alert.showAndWait();
-            return;
-        }
-
         actiefBericht = new Bericht(1, message, LocalDateTime.now(), gebruiker);
-
+        //popup die je vraagt aan wat je het wil kopelen
         ChoiceDialog<String> dialog = new ChoiceDialog<>("UserStory", "UserStory", "Taak", "Epic");
         dialog.setTitle("Koppel bericht");
         dialog.setHeaderText("Koppel dit bericht aan een UserStory, Taak of Epic.");
         dialog.setContentText("Selecteer:");
-
         String keuze = dialog.showAndWait().orElse(null);
-        if (keuze == null) return;
-
-        switch (keuze) {
+        if (keuze == null) return; // als je niks kiest om te koppelen
+        switch (keuze) { // kopelt bericht aan taak, epic, userstory die dan wordt gemaakt
             case "UserStory" -> actiefBericht.koppelUserStory(new UserStory(1, "Voorbeeld UserStory"));
             case "Taak" -> actiefBericht.koppelTaak(new Taak(1, "Voorbeeld Taak"));
             case "Epic" -> actiefBericht.koppelEpic(new Epic(1, "Voorbeeld Epic"));
         }
 
-        Alert bevestiging = new Alert(Alert.AlertType.INFORMATION);
-        bevestiging.setTitle("Gekoppeld");
-        bevestiging.setHeaderText(null);
-        bevestiging.setContentText("Het bericht is gekoppeld aan: " + actiefBericht.getGekoppeldObject());
-        bevestiging.showAndWait();
     }
 
-    private void returnToTeamSelection() {
-        output.close();
-        setupChat();
+    private void updateTeamLijst(String teamData) {
+        String[] serverTeams = teamData.split(","); // split de string van teamnamen af en doet het in een array
+        // hieronder haal je de team box op
+        ComboBox<String> teamComboBox = (ComboBox<String>) ((HBox) root.getChildren().get(0)).getChildren().get(1);
+        for (String teamName : serverTeams) {
+            // hier check je of het team in in de lijst van teams staat
+            boolean bestaatAl = teams.stream().anyMatch(t -> t.getNaam().equals(teamName));
+            if (!bestaatAl) { // als bestaalAl false is voegen we nieuwe team toe
+                // Voeg nieuw team toe aan lijst
+                int newId = teams.size() + 1;
+                Team nieuwTeam = new Team(teamName, "Team toegevoegd vanaf server.");
+                teams.add(nieuwTeam);
+                // voegen we het toe aan de box waar je kan kiezen welk team je wil
+                teamComboBox.getItems().add(teamName);
+            }
+        }
     }
 
     private void connectToServer() {
         new Thread(() -> {
             try {
+                // Sluit de oude verbinding als die nog open is
+                if (output != null) {
+                    output.close();
+                }
+                // Maak een nieuwe verbinding
                 Socket socket = new Socket(serverAddress, PORT);
+                // het ontvangen van berichten (inlezen van berichten)
                 BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                // het het maken / schrijven van nieuwe berichten naar de server
                 output = new PrintWriter(socket.getOutputStream(), true);
+                //stuur naam van het team dat je nu in zit naar ChatServer oftewel server
+                output.println(team.getNaam());
 
+                String teamNamen = teams.stream()
+                        .map(Team::getNaam)
+                        .collect(Collectors.joining(",")); // Verzamel alle teamnamen in een komma-gescheiden string
+                output.println("TEAMLIST:" + teamNamen); // Stuur de lijst van lokale teams naar de server
                 String message;
                 while ((message = input.readLine()) != null) {
                     String finalMessage = message;
-                    javafx.application.Platform.runLater(() -> chatArea.appendText(finalMessage + "\n"));
+                    // als je een bericht krijgt van de server die begint met TEAMS: begint de volgende code
+                    if (message.startsWith("TEAMS:")) {
+                        // haalt TEAMS: weg en stopt wat over blijft in teamData
+                        String teamData = message.substring("TEAMS:".length());
+                        // hier gaan we de teams updaten met mogelijke nieuwe teams die er zijn
+                        javafx.application.Platform.runLater(() -> updateTeamLijst(teamData));
+                    } else {
+                        // als het bericht niet begint met TEAMS: stuur je dit bericht je kan bijvoorbeeld zeggen connectie succesvol heb ik weg gelaten
+                        javafx.application.Platform.runLater(() -> chatArea.appendText(finalMessage + "\n"));
+                    }
                 }
-            } catch (IOException e) {
-                javafx.application.Platform.runLater(() -> chatArea.appendText("\u274C Failed to connect to the server\n"));
-            }
+            } catch (IOException e) {// in het geval dat er een connectie fout is wordt dit bericht getoont
+                javafx.application.Platform.runLater(() -> chatArea.appendText(""));
+            }// Start de thread om de verbinding met de server in de achtergrond te laten werken
         }).start();
     }
 
+    // Methode om een dialoogvenster weer te geven voor het maken van een nieuw team
+    private void NieuwteamBericht() {
+        // Maak de dialoogvensters voor naam en beschrijving
+        TextInputDialog nameDialog = new TextInputDialog();
+        nameDialog.setTitle("Nieuw team");
+        nameDialog.setHeaderText("Geef de naam van het team in:");
+        nameDialog.setContentText("Teamnaam:");
+        TextInputDialog descriptionDialog = new TextInputDialog();
+        descriptionDialog.setTitle("Nieuw team");
+        descriptionDialog.setHeaderText("Geef een beschrijving voor het team in:");
+        descriptionDialog.setContentText("Teamomschrijving:");
+        // Wacht op de input van de gebruiker
+        String teamName = nameDialog.showAndWait().orElse("");
+        String teamDescription = descriptionDialog.showAndWait().orElse("");
+        if (!teamName.isEmpty() && !teamDescription.isEmpty()) {
+            // Maak een nieuw team en voeg het toe aan de lijst van teams
+            int newTeamId = teams.size() + 1;
+            Team newTeam = new Team(teamName, teamDescription);
+            teams.add(newTeam);
+            // Voeg het nieuwe team toe aan de ComboBox voor teamselectie
+            ComboBox<String> teamComboBox = (ComboBox<String>) ((HBox) root.getChildren().get(0)).getChildren().get(1);
+            teamComboBox.getItems().add(newTeam.getNaam());
+            // Selecteer het nieuwe team
+            teamComboBox.setValue(newTeam.getNaam());
+            updateChatvoorTeam();
+        } else {
+            // Toon een waarschuwing als de naam of beschrijving van het nieuwe team leeg is
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Fout");
+            alert.setHeaderText(null);
+            alert.setContentText("Zowel de naam als de beschrijving moeten ingevuld worden.");
+            alert.showAndWait();
+        }
+    }
+
     private void sendMessage() {
+        // Haalt de tekst uit het inputveld en verwijderd spaties voor en achter  het bericht
         String message = inputField.getText().trim();
+        // Controleer of het bericht niet leeg is
         if (!message.isEmpty()) {
+            // Controleer of er nog geen actief bericht is (voor koppelen)
             if (actiefBericht == null) {
+                // Maak een nieuw bericht object met de huidige tijd en gebruiker we gebruiken niet de tijd en datum zo ver komen we niet
                 actiefBericht = new Bericht(1, message, LocalDateTime.now(), gebruiker);
             }
-
-            if (actiefBericht.getGekoppeldObject().equals("Geen gekoppelde objecten")) {
+            // controleert of het actieve bericht niet gekoppeld is aan een object
+            if (actiefBericht.getGekoppeldObject().equals("geen")) {
+                // stuurt het bericht naar de server met de gebruikersnaam en teamnaam
                 output.println(gebruiker.getNaam() + " (" + team.getNaam() + "): " + actiefBericht.getInhoud());
             } else {
-                output.println(gebruiker.getNaam() + " (" + team.getNaam() + "): " + actiefBericht.getInhoud() + " [" + actiefBericht.getGekoppeldObject() + "]");
+                // als het actieve bericht wel gekoppeld is zelfde als de vorige maar dan met het gekoppelde object
+                output.println(gebruiker.getNaam() + " (" + team.getNaam() + "): " + actiefBericht.getInhoud() + " [" + actiefBericht.getGekoppeldObject() + "]"); // Stuur het bericht met de koppeling informatie naar de server
             }
-
+            // reset het actieve bericht na het verzenden
             actiefBericht = null;
+            // leeg het inputveld voor het volgende bericht
             inputField.clear();
         }
     }
 
-    private String promptServerAddress() {
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle("Verbind naar een server / host");
-        dialog.setHeaderText("Geef het IP-adres van de server op:");
-        dialog.setContentText("Server:");
-        return dialog.showAndWait().orElse("");
-    }
-
     private String promptGebruikersnaam() {
+        //popup die vraagt voor gebruikersnaam
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Gebruikersnaam");
         dialog.setHeaderText("Voer je gebruikersnaam in:");
         dialog.setContentText("Gebruikersnaam:");
+        //throw betekent gwn sluit de hele aplicatie
         return dialog.showAndWait().orElseThrow();
     }
 
-    private Team promptSelectTeam() {
-        ChoiceDialog<Team> dialog = new ChoiceDialog<>(teams.get(0), teams);
-        dialog.setTitle("Team Selectie");
-        dialog.setHeaderText("Kies een bestaand team:");
-        dialog.setContentText("Team:");
-        return dialog.showAndWait().orElseThrow();
-    }
-
-    private String promptSelectOnderwerp() {
-        ArrayList<String> teamOnderwerpen = team.getOnderwerpen();
-        ChoiceDialog<String> dialog = new ChoiceDialog<>(teamOnderwerpen.get(0), teamOnderwerpen);
-        dialog.setTitle("Chat Onderwerp");
-        dialog.setHeaderText("Kies een bestaand onderwerp voor het team: " + team.getNaam());
-        dialog.setContentText("Onderwerp:");
-        return dialog.showAndWait().orElseThrow();
-    }
-
-    public static void main(String[] args) {
+    public static void main(String[] args) { // dit is het eerste dat runt
+        // start de JavaFX applicatie
         launch(args);
-    }
 }
-
-// andere classe
+}
+// andere classen
 
 class Team {
-    private int id;
     private String naam;
-    private ArrayList<String> onderwerpen;
+    private String onderwerp;
     private Chat chat;
 
-    public Team(int id, String naam) {
-        this.id = id;
+
+    public Team(String naam, String onderwerp) {
+
         this.naam = naam;
-        this.onderwerpen = new ArrayList<>();
+        this.onderwerp = onderwerp;
+    }
+    public String getOnderwerp() {
+        return onderwerp;
     }
 
     public String getNaam() {
         return naam;
+    }
+    public void setOnderwerp(String onderwerp) {
+        this.onderwerp = onderwerp;
     }
 
     public void setChat(Chat chat) {
@@ -267,14 +319,6 @@ class Team {
 
     public Chat getChat() {
         return chat;
-    }
-
-    public ArrayList<String> getOnderwerpen() {
-        return onderwerpen;
-    }
-
-    public void voegOnderwerpToe(String onderwerp) {
-        this.onderwerpen.add(onderwerp);
     }
 
     @Override
@@ -295,9 +339,7 @@ class Gebruiker {
         this.email = email;
     }
 
-    public int getId() {
-        return id;
-    }
+
 
     public String getNaam() {
         return naam;
@@ -307,11 +349,11 @@ class Gebruiker {
         this.naam = naam;
     }
 
-    public String getEmail() {
+    public String getEmail() { // gebruiken we nog niet
         return email;
     }
 
-    public Team getTeam() {
+    public Team getTeam() {// gebruiken we nog niet
         return team;
     }
 
@@ -321,16 +363,11 @@ class Gebruiker {
 }
 
 class Chat {
-    private int id;
-    private String onderwerp;
+    private int id; // gebruiken we nog niet
 
-    public Chat(int id, String onderwerp) {
+    public Chat(int id) {
         this.id = id;
-        this.onderwerp = onderwerp;
-    }
 
-    public String getOnderwerp() {
-        return onderwerp;
     }
 }
 class UserStory {
@@ -371,19 +408,19 @@ class Epic {
 
 class Taak {
     private int id;
-    private String beschrijving;
+    private String beschrijvingVanTaak;
 
-    public Taak(int id, String beschrijving) {
+    public Taak(int id, String beschrijvingVanTaak) {
         this.id = id;
-        this.beschrijving = beschrijving;
+        this.beschrijvingVanTaak = beschrijvingVanTaak;
     }
 
     public int getId() {
         return id;
     }
 
-    public String getBeschrijving() {
-        return beschrijving;
+    public String getBeschrijvingVanTaak() {
+        return beschrijvingVanTaak;
     }
 }
 
@@ -444,11 +481,11 @@ class Bericht {
         if (gekoppeldeUserStory != null) {
             return "UserStory: " + gekoppeldeUserStory.getNaam();
         } else if (gekoppeldeTaak != null) {
-            return "Taak: " + gekoppeldeTaak.getBeschrijving();
+            return "Taak: " + gekoppeldeTaak.getBeschrijvingVanTaak();
         } else if (gekoppeldeEpic != null) {
             return "Epic: " + gekoppeldeEpic.getNaam();
         } else {
-            return "Geen gekoppelde objecten";
+            return "geen";
         }
     }
 }
