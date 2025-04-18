@@ -25,7 +25,6 @@ public class ChatClientFX extends Application {
     private static final int PORT = 12345;
     private Stage scherm;
     private Bericht actiefBericht;
-    private Chat chat;
     private VBox root;
     // lijst met alle teams
     private static final ArrayList<Team> teams = new ArrayList<>();
@@ -52,7 +51,6 @@ public class ChatClientFX extends Application {
         gebruiker = new Gebruiker(1, gebruikersnaam, "");
         // Begin met het instellen van het eerste team
         team = teams.get(0);
-        team.setChat(chat);
         gebruiker.setTeam(team);
         connectToServer();
         // setOnMouseEntered is de kleur die het vakje is als je je muis er over heen houdt.
@@ -294,7 +292,7 @@ public class ChatClientFX extends Application {
 class Team {
     private String naam;
     private String onderwerp;
-    private Chat chat;
+    
 
 
     public Team(String naam, String onderwerp) {
@@ -313,13 +311,7 @@ class Team {
         this.onderwerp = onderwerp;
     }
 
-    public void setChat(Chat chat) {
-        this.chat = chat;
-    }
-
-    public Chat getChat() {
-        return chat;
-    }
+    
 
     @Override
     public String toString() {
@@ -359,15 +351,6 @@ class Gebruiker {
 
     public void setTeam(Team team) {
         this.team = team;
-    }
-}
-
-class Chat {
-    private int id; // gebruiken we nog niet
-
-    public Chat(int id) {
-        this.id = id;
-
     }
 }
 class UserStory {
