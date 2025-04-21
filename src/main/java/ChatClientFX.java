@@ -317,7 +317,7 @@ class Team {
     public String toString() {
         return naam;
     }
-} // Gebruiker, Chat, UserStory, Epic, Taak en Bericht kun je ongewijzigd laten behalve als je daar ook expliciet ArrayList wilt afdwingen.
+}
 
 class Gebruiker {
     private int id;
